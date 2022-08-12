@@ -210,6 +210,7 @@ func (ctrl *PersistentVolumeController) storeClaimUpdate(claim interface{}) (boo
 func (ctrl *PersistentVolumeController) updateVolume(ctx context.Context, volume *v1.PersistentVolume) {
 	// Store the new volume version in the cache and do not process it if this
 	// is an old version.
+  //更新缓存
 	new, err := ctrl.storeVolumeUpdate(volume)
 	if err != nil {
 		klog.Errorf("%v", err)
@@ -218,6 +219,7 @@ func (ctrl *PersistentVolumeController) updateVolume(ctx context.Context, volume
 		return
 	}
 
+  //核心方法，根据当前pv对象的规格对pv和pvc进行绑定或者解绑
 	err = ctrl.syncVolume(ctx, volume)
 	if err != nil {
 		if errors.IsConflict(err) {
@@ -302,6 +304,7 @@ func (ctrl *PersistentVolumeController) deleteClaim(claim *v1.PersistentVolumeCl
 	ctrl.volumeQueue.Add(volumeName)
 }
 
+//入口
 // Run starts all of this controller's control loops
 func (ctrl *PersistentVolumeController) Run(ctx context.Context) {
 	defer utilruntime.HandleCrash()
@@ -316,9 +319,11 @@ func (ctrl *PersistentVolumeController) Run(ctx context.Context) {
 	}
 
 	ctrl.initializeCaches(ctrl.volumeLister, ctrl.claimLister)
-
+  //resync主要作用是找出pv和pvc列表然后放入到列表volumeQueue和claimQueue中，供volumeWorker和claimWorker消费
 	go wait.Until(ctrl.resync, ctrl.resyncPeriod, ctx.Done())
+  //volumeWorker不断循环消费volumeQueue队列里面的数据，然后获取到相应的pv执行updateVolume操作
 	go wait.UntilWithContext(ctx, ctrl.volumeWorker, time.Second)
+  //claimWorker不断循环消费claimQueue队列里面的数据，然后调用updateClaim方法进入到syncClaim进行具体的操作
 	go wait.UntilWithContext(ctx, ctrl.claimWorker, time.Second)
 
 	metrics.Register(ctrl.volumes.store, ctrl.claims, &ctrl.volumePluginMgr)
@@ -483,6 +488,7 @@ func updateMigrationAnnotations(cmpm CSIMigratedPluginManager, translator CSINam
 	return false
 }
 
+//volumeWorker不断循环消费volumeQueue队列里面的数据，然后获取到相应的pv执行updateVolume操作
 // volumeWorker processes items from volumeQueue. It must run only once,
 // syncVolume is not assured to be reentrant.
 func (ctrl *PersistentVolumeController) volumeWorker(ctx context.Context) {
@@ -502,6 +508,7 @@ func (ctrl *PersistentVolumeController) volumeWorker(ctx context.Context) {
 		}
 		volume, err := ctrl.volumeLister.Get(name)
 		if err == nil {
+      //更新volume
 			// The volume still exists in informer cache, the event must have
 			// been add/update/sync
 			ctrl.updateVolume(ctx, volume)
@@ -541,6 +548,7 @@ func (ctrl *PersistentVolumeController) volumeWorker(ctx context.Context) {
 	}
 }
 
+//claimWorker不断循环消费claimQueue队列里面的数据，然后调用updateClaim方法进入到syncClaim进行具体的操作
 // claimWorker processes items from claimQueue. It must run only once,
 // syncClaim is not reentrant.
 func (ctrl *PersistentVolumeController) claimWorker(ctx context.Context) {
